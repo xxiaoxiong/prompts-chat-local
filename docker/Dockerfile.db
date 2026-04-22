@@ -1,0 +1,2 @@
+FROM postgres:17-bookworm
+COPY prompts_data.sql /docker-entrypoint-initdb.d/
