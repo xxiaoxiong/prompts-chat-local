@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Info } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { getConfig } from "@/lib/config";
 import { PromptForm } from "@/components/prompts/prompt-form";
 import { db } from "@/lib/db";
 import { isAIGenerationEnabled, getAIModelName } from "@/lib/ai/generation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AnonymousWriteNotice } from "@/components/layout/anonymous-write-notice";
 
 export const metadata: Metadata = {
   title: "Create Prompt",
@@ -25,10 +27,12 @@ interface PageProps {
 
 export default async function NewPromptPage({ searchParams }: PageProps) {
   const session = await auth();
+  const config = await getConfig();
+  const anonymousWriteEnabled = config.features.allowAnonymousWrite === true;
   const t = await getTranslations("prompts");
   const { prompt: initialPromptRequest, title, content, type, format } = await searchParams;
 
-  if (!session?.user) {
+  if (!session?.user && !anonymousWriteEnabled) {
     redirect("/login");
   }
 
@@ -60,6 +64,7 @@ export default async function NewPromptPage({ searchParams }: PageProps) {
           {t("createInfo")}
         </AlertDescription>
       </Alert>
+      {anonymousWriteEnabled && <AnonymousWriteNotice className="mb-6" />}
       <PromptForm 
         categories={categories} 
         tags={tags} 

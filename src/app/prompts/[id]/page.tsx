@@ -26,14 +26,17 @@ import { UnlistPromptButton } from "@/components/prompts/unlist-prompt-button";
 import { UserExamplesSection } from "@/components/prompts/user-examples-section";
 import { DelistBanner } from "@/components/prompts/delist-banner";
 import { RestorePromptButton } from "@/components/prompts/restore-prompt-button";
+import { DeletePromptButton } from "@/components/prompts/delete-prompt-button";
 import { CommentSection } from "@/components/comments";
 import { PromptFlowSection } from "@/components/prompts/prompt-flow-section";
 import { RelatedPrompts } from "@/components/prompts/related-prompts";
 import { AddToCollectionButton } from "@/components/prompts/add-to-collection-button";
 import { getConfig } from "@/lib/config";
+import { isAnonymousWriteEnabled } from "@/lib/anonymous-write";
 import { StructuredData } from "@/components/seo/structured-data";
 import { AI_MODELS } from "@/lib/works-best-with";
 import { EzoicAd } from "@/components/ads/ezoic-ad";
+import { AnonymousWriteNotice } from "@/components/layout/anonymous-write-notice";
 
 interface PromptPageProps {
   params: Promise<{ id: string }>;
@@ -92,6 +95,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
   const locale = await getLocale();
 
   const isAdmin = session?.user?.role === "ADMIN";
+  const anonymousWriteEnabled = await isAnonymousWriteEnabled();
   
   // Admins can view deleted prompts, others cannot
   const prompt = await db.prompt.findFirst({
@@ -240,7 +244,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
   // They just don't appear in public listings, search results, or feeds
 
   const isOwner = session?.user?.id === prompt.authorId;
-  const canEdit = isOwner || isAdmin;
+  const canEdit = anonymousWriteEnabled || isOwner || isAdmin;
   const voteCount = prompt._count?.votes ?? 0;
   const hasVoted = !!userVote;
   const inCollection = !!userCollection;
@@ -317,6 +321,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
         }}
       />
       <div className="container max-w-4xl py-8">
+        {anonymousWriteEnabled && <AnonymousWriteNotice className="mb-6" />}
         {/* Deleted Banner - shown to admins when prompt is deleted */}
       {prompt.deletedAt && isAdmin && (
         <div className="mb-6 p-4 rounded-lg border border-red-500/30 bg-red-500/5">
@@ -476,7 +481,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
               isLoggedIn={!!session?.user}
             />
             <div className="flex gap-2">
-              {!isOwner && session?.user && (
+              {!isOwner && session?.user && !anonymousWriteEnabled && (
                 <Button asChild size="sm">
                   <Link href={`/prompts/${id}/changes/new`}>
                     <GitPullRequest className="h-4 w-4 mr-1.5" />
@@ -484,13 +489,16 @@ export default async function PromptPage({ params }: PromptPageProps) {
                   </Link>
                 </Button>
               )}
-              {isOwner && (
+              {canEdit && (
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/prompts/${id}/edit`}>
                     <Edit className="h-4 w-4 mr-1.5" />
                     {t("edit")}
                   </Link>
                 </Button>
+              )}
+              {canEdit && (
+                <DeletePromptButton promptId={id} redirectTo="/prompts" variant="outline" size="sm" />
               )}
             </div>
           </div>
@@ -523,7 +531,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
                 initialInCollection={inCollection}
                 isLoggedIn={!!session?.user}
               />
-              {!isOwner && session?.user && (
+              {!isOwner && session?.user && !anonymousWriteEnabled && (
                 <Button asChild size="sm">
                   <Link href={`/prompts/${id}/changes/new`}>
                     <GitPullRequest className="h-4 w-4 mr-1.5" />
@@ -531,13 +539,16 @@ export default async function PromptPage({ params }: PromptPageProps) {
                   </Link>
                 </Button>
               )}
-              {isOwner && (
+              {canEdit && (
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/prompts/${id}/edit`}>
                     <Edit className="h-4 w-4 mr-1.5" />
                     {t("edit")}
                   </Link>
                 </Button>
+              )}
+              {canEdit && (
+                <DeletePromptButton promptId={id} redirectTo="/prompts" variant="outline" size="sm" />
               )}
             </div>
           </div>

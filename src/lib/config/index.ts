@@ -45,6 +45,7 @@ export interface FeaturesConfig {
   aiGeneration?: boolean;
   mcp?: boolean;
   comments?: boolean;
+  allowAnonymousWrite?: boolean;
 }
 
 export interface Sponsor {
@@ -95,6 +96,7 @@ let cachedConfig: PromptsConfig | null = null;
  *   PCHAT_AUTH_PROVIDERS (comma-separated), PCHAT_ALLOW_REGISTRATION (true|false)
  *   PCHAT_LOCALES (comma-separated), PCHAT_DEFAULT_LOCALE
  *   PCHAT_FEATURE_* (true|false for each feature)
+ *   ALLOW_ANONYMOUS_WRITE (true|false) enables intranet anonymous collaboration mode
  */
 function applyEnvOverrides(config: PromptsConfig): PromptsConfig {
   const env = process.env;
@@ -155,6 +157,7 @@ function applyEnvOverrides(config: PromptsConfig): PromptsConfig {
       aiGeneration: envBool('PCHAT_FEATURE_AI_GENERATION', config.features.aiGeneration ?? false),
       mcp: envBool('PCHAT_FEATURE_MCP', config.features.mcp ?? false),
       comments: envBool('PCHAT_FEATURE_COMMENTS', config.features.comments ?? true),
+      allowAnonymousWrite: envBool('ALLOW_ANONYMOUS_WRITE', config.features.allowAnonymousWrite ?? false),
     },
     homepage: env.PCHAT_NAME ? {
       // If custom branding via env, use clone branding mode
@@ -208,6 +211,7 @@ export async function getConfig(): Promise<PromptsConfig> {
         aiSearch: false,
         aiGeneration: false,
         comments: true,
+        allowAnonymousWrite: false,
       },
     };
   }

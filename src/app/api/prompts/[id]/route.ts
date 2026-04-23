@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { generatePromptEmbedding, findAndSaveRelatedPrompts } from "@/lib/ai/embeddings";
 import { generatePromptSlug } from "@/lib/slug";
 import { checkPromptQuality } from "@/lib/ai/quality-check";
+import { isAnonymousWriteEnabled, requireUserOrAnonymous } from "@/lib/anonymous-write";
 
 const updatePromptSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -31,7 +32,7 @@ const updatePromptSchema = z.object({
 
 // Get single prompt
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -123,13 +124,10 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const session = await auth();
+    const { actor, unauthorizedResponse } = await requireUserOrAnonymous();
 
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "unauthorized", message: "You must be logged in" },
-        { status: 401 }
-      );
+    if (!actor) {
+      return unauthorizedResponse;
     }
 
     // Check if prompt exists and user owns it
@@ -145,7 +143,9 @@ export async function PATCH(
       );
     }
 
-    if (existing.authorId !== session.user.id && session.user.role !== "ADMIN") {
+    const anonymousWriteEnabled = await isAnonymousWriteEnabled();
+    const shouldSkipQualityDelist = anonymousWriteEnabled && actor.isAnonymous;
+    if (!anonymousWriteEnabled && existing.authorId !== actor.id && actor.role !== "ADMIN") {
       return NextResponse.json(
         { error: "forbidden", message: "You can only edit your own prompts" },
         { status: 403 }
@@ -233,7 +233,7 @@ export async function PATCH(
           version: (latestVersion?.version || 0) + 1,
           content: data.content,
           changeNote: "Content updated",
-          createdBy: session.user.id,
+          createdBy: actor.id,
         },
       });
     }
@@ -252,16 +252,13 @@ export async function PATCH(
 
     // Run quality check for auto-delist on content changes (non-blocking)
     // Only for public prompts that aren't already delisted
-    if (contentChanged && !prompt.isPrivate && !prompt.isUnlisted) {
+    if (contentChanged && !prompt.isPrivate && !prompt.isUnlisted && !shouldSkipQualityDelist) {
       const checkTitle = title || prompt.title;
       const checkContent = data.content || prompt.content;
       const checkDescription = data.description !== undefined ? data.description : prompt.description;
       
-      console.log(`[Quality Check] Starting check for updated prompt ${id}`);
       checkPromptQuality(checkTitle, checkContent, checkDescription).then(async (result) => {
-        console.log(`[Quality Check] Result for prompt ${id}:`, JSON.stringify(result));
         if (result.shouldDelist && result.reason) {
-          console.log(`[Quality Check] Auto-delisting prompt ${id}: ${result.reason} - ${result.details}`);
           await db.prompt.update({
             where: { id },
             data: {
@@ -270,7 +267,6 @@ export async function PATCH(
               delistReason: result.reason,
             },
           });
-          console.log(`[Quality Check] Prompt ${id} delisted successfully`);
         }
       }).catch((err) => {
         console.error("[Quality Check] Failed to run quality check for prompt:", id, err);
@@ -353,18 +349,15 @@ export async function PATCH(
 // - Admins can delete any prompt
 // - Owners can delete their own delisted prompts (auto-delisted for quality issues)
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const session = await auth();
+    const { actor, unauthorizedResponse } = await requireUserOrAnonymous();
 
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "unauthorized", message: "You must be logged in" },
-        { status: 401 }
-      );
+    if (!actor) {
+      return unauthorizedResponse;
     }
 
     // Check if prompt exists and get ownership/delist status
@@ -393,13 +386,12 @@ export async function DELETE(
       );
     }
 
-    const isAdmin = session.user.role === "ADMIN";
-    const isOwner = existing.authorId === session.user.id;
+    const anonymousWriteEnabled = await isAnonymousWriteEnabled();
+    const isAdmin = actor.role === "ADMIN";
+    const isOwner = existing.authorId === actor.id;
     const isDelisted = existing.isUnlisted && existing.delistReason;
 
-    // Owners can only delete their own delisted prompts (quality issues)
-    // Admins can delete any prompt
-    if (!isAdmin && !(isOwner && isDelisted)) {
+    if (!anonymousWriteEnabled && !isAdmin && !(isOwner && isDelisted)) {
       return NextResponse.json(
         { 
           error: "forbidden", 

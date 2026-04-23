@@ -2,9 +2,12 @@ import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/lib/auth";
+import { getConfig } from "@/lib/config";
 import { db } from "@/lib/db";
 import { PromptForm } from "@/components/prompts/prompt-form";
+import { DeletePromptButton } from "@/components/prompts/delete-prompt-button";
 import { isAIGenerationEnabled, getAIModelName } from "@/lib/ai/generation";
+import { AnonymousWriteNotice } from "@/components/layout/anonymous-write-notice";
 
 interface EditPromptPageProps {
   params: Promise<{ id: string }>;
@@ -30,9 +33,11 @@ export default async function EditPromptPage({ params }: EditPromptPageProps) {
   const { id: idParam } = await params;
   const id = extractPromptId(idParam);
   const session = await auth();
+  const config = await getConfig();
+  const anonymousWriteEnabled = config.features.allowAnonymousWrite === true;
   const t = await getTranslations("prompts");
 
-  if (!session?.user) {
+  if (!session?.user && !anonymousWriteEnabled) {
     redirect("/login");
   }
 
@@ -61,10 +66,10 @@ export default async function EditPromptPage({ params }: EditPromptPageProps) {
   }
 
   // Check if user is the author or admin
-  const isAuthor = prompt.authorId === session.user.id;
-  const isAdmin = session.user.role === "ADMIN";
+  const isAuthor = prompt.authorId === session?.user?.id;
+  const isAdmin = session?.user?.role === "ADMIN";
   
-  if (!isAuthor && !isAdmin) {
+  if (!anonymousWriteEnabled && !isAuthor && !isAdmin) {
     redirect(`/prompts/${id}`);
   }
 
@@ -106,7 +111,8 @@ export default async function EditPromptPage({ params }: EditPromptPageProps) {
   const aiModelName = getAIModelName();
 
   return (
-    <div className="container max-w-3xl py-8">
+    <div className="container max-w-3xl py-8 space-y-6">
+      {anonymousWriteEnabled && <AnonymousWriteNotice className="mb-6" />}
       <PromptForm
         categories={categories}
         tags={tags}
@@ -117,6 +123,15 @@ export default async function EditPromptPage({ params }: EditPromptPageProps) {
         aiGenerationEnabled={aiGenerationEnabled}
         aiModelName={aiModelName}
       />
+      <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-destructive">{t("deletePrompt")}</h2>
+            <p className="text-sm text-muted-foreground">{t("deletePromptDescription")}</p>
+          </div>
+          <DeletePromptButton promptId={id} redirectTo="/prompts" />
+        </div>
+      </div>
     </div>
   );
 }

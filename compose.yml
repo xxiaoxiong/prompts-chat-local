@@ -33,6 +33,7 @@ services:
       DATABASE_URL: "postgresql://prompts:${POSTGRES_PASSWORD:-prompts}@db:5432/prompts?schema=public"
       DIRECT_URL: "postgresql://prompts:${POSTGRES_PASSWORD:-prompts}@db:5432/prompts?schema=public"
       AUTH_SECRET: "${AUTH_SECRET:-}"
+      ALLOW_ANONYMOUS_WRITE: "${ALLOW_ANONYMOUS_WRITE:-false}"
       NODE_ENV: production
       # Branding (all optional — set any PCHAT_* variable to customize at runtime)
       # PCHAT_NAME: "My Prompt Library"

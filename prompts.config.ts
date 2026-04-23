@@ -64,6 +64,8 @@ export default defineConfig({
     mcp: true,
     // Enable comments on prompts
     comments: true,
+    // Enable intranet anonymous collaboration mode via ALLOW_ANONYMOUS_WRITE=true
+    allowAnonymousWrite: false,
   },
 
   // Homepage customization

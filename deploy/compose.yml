@@ -25,6 +25,7 @@ services:
       DIRECT_URL: "postgresql://prompts:${POSTGRES_PASSWORD:-prompts}@db:5432/prompts?schema=public"
       NODE_ENV: production
       AUTH_SECRET: "${AUTH_SECRET}"
+      ALLOW_ANONYMOUS_WRITE: "${ALLOW_ANONYMOUS_WRITE:-false}"
       AUTH_URL: "${APP_URL:-http://172.16.80.250:4444}"
       NEXTAUTH_URL: "${APP_URL:-http://172.16.80.250:4444}"
       AUTH_TRUST_HOST: "true"

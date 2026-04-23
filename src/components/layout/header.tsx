@@ -106,9 +106,10 @@ const languages = [
 interface HeaderProps {
   authProvider?: string;
   allowRegistration?: boolean;
+  anonymousWriteEnabled?: boolean;
 }
 
-export function Header({ authProvider = "credentials", allowRegistration = true }: HeaderProps) {
+export function Header({ authProvider = "credentials", allowRegistration = true, anonymousWriteEnabled = false }: HeaderProps) {
   const isOAuth = authProvider !== "credentials";
   const { data: session } = useSession();
   const t = useTranslations();
@@ -463,7 +464,7 @@ export function Header({ authProvider = "credentials", allowRegistration = true 
           </Button>
 
           {/* Create prompt button */}
-          {user && (
+          {(user || anonymousWriteEnabled) && (
             <Button asChild variant="ghost" size="icon" className="h-8 w-8">
               <Link href="/prompts/new">
                 <Plus className="h-4 w-4" />
@@ -515,6 +516,12 @@ export function Header({ authProvider = "credentials", allowRegistration = true 
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             <span className="sr-only">Toggle theme</span>
           </Button>
+
+          {anonymousWriteEnabled && (
+            <div className="hidden md:flex items-center rounded-md border px-2 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              Intranet Anonymous Write Mode
+            </div>
+          )}
 
           {/* User menu or login */}
           {user ? (
@@ -592,6 +599,29 @@ export function Header({ authProvider = "credentials", allowRegistration = true 
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+          ) : anonymousWriteEnabled ? (
+            <div className="flex items-center gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Globe className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {languages.map((lang) => (
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => {
+                        analyticsSettings.changeLanguage(lang.code);
+                        setLocale(lang.code);
+                      }}
+                    >
+                      {lang.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : (
             <div className="flex items-center gap-1">
               {/* Language selector for non-logged in users */}

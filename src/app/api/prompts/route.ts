@@ -8,6 +8,7 @@ import { generatePromptEmbedding, findAndSaveRelatedPrompts } from "@/lib/ai/emb
 import { generatePromptSlug } from "@/lib/slug";
 import { checkPromptQuality } from "@/lib/ai/quality-check";
 import { isSimilarContent, normalizeContent } from "@/lib/similarity";
+import { requireUserOrAnonymous, isAnonymousWriteEnabled } from "@/lib/anonymous-write";
 
 const promptSchema = z.object({
   title: z.string().min(1).max(200),
@@ -34,12 +35,9 @@ const promptSchema = z.object({
 // Create prompt
 export async function POST(request: Request) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "unauthorized", message: "You must be logged in" },
-        { status: 401 }
-      );
+    const { actor, unauthorizedResponse } = await requireUserOrAnonymous();
+    if (!actor) {
+      return unauthorizedResponse;
     }
 
     const body = await request.json();
@@ -53,10 +51,12 @@ export async function POST(request: Request) {
     }
 
     const { title, description, content, type, structuredFormat, categoryId, tagIds, contributorIds, isPrivate, mediaUrl, requiresMediaUpload, requiredMediaType, requiredMediaCount, bestWithModels, bestWithMCP, workflowLink } = parsed.data;
+    const anonymousWriteEnabled = await isAnonymousWriteEnabled();
+    const shouldSkipQualityDelist = anonymousWriteEnabled && actor.isAnonymous;
 
     // Check if user is flagged (for auto-delisting and daily limit)
     const currentUser = await db.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: actor.id },
       select: { flagged: true },
     });
     const isUserFlagged = currentUser?.flagged ?? false;
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       
       const todayPromptCount = await db.prompt.count({
         where: {
-          authorId: session.user.id,
+          authorId: actor.id,
           createdAt: { gte: startOfDay },
         },
       });
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
     const recentPrompt = await db.prompt.findFirst({
       where: {
-        authorId: session.user.id,
+        authorId: actor.id,
         createdAt: { gte: thirtySecondsAgo },
       },
       select: { id: true },
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     // Check for duplicate title or content from the same user
     const userDuplicate = await db.prompt.findFirst({
       where: {
-        authorId: session.user.id,
+        authorId: actor.id,
         deletedAt: null,
         OR: [
           { title: { equals: title, mode: "insensitive" } },
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
         bestWithModels: bestWithModels || [],
         bestWithMCP: bestWithMCP || [],
         workflowLink: workflowLink || null,
-        authorId: session.user.id,
+        authorId: actor.id,
         categoryId: categoryId || null,
         // Auto-delist prompts from flagged users
         ...(isUserFlagged && {
@@ -234,7 +234,7 @@ export async function POST(request: Request) {
         version: 1,
         content,
         changeNote: "Initial version",
-        createdBy: session.user.id,
+        createdBy: actor.id,
       },
     });
 
@@ -267,7 +267,7 @@ export async function POST(request: Request) {
 
     // Run quality check for auto-delist (non-blocking for public prompts)
     // This runs in the background and will delist the prompt if quality issues are found
-    if (!isPrivate) {
+    if (!isPrivate && !shouldSkipQualityDelist) {
       console.log(`[Quality Check] Starting check for prompt ${prompt.id}`);
       checkPromptQuality(title, content, description).then(async (result) => {
         console.log(`[Quality Check] Result for prompt ${prompt.id}:`, JSON.stringify(result));
@@ -287,7 +287,7 @@ export async function POST(request: Request) {
         console.error("[Quality Check] Failed to run quality check for prompt:", prompt.id, err);
       });
     } else {
-      console.log(`[Quality Check] Skipped - prompt ${prompt.id} is private`);
+      console.log(`[Quality Check] Skipped for prompt ${prompt.id} (private or anonymous write mode)`);
     }
 
     // Revalidate caches (prompts, categories, tags counts change)

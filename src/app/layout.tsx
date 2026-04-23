@@ -199,7 +199,7 @@ export default async function RootLayout({
             <>
               <LocaleDetector />
               <div className="relative min-h-screen flex flex-col">
-                <Header authProvider={config.auth.provider} allowRegistration={config.auth.allowRegistration} />
+                <Header authProvider={config.auth.provider} allowRegistration={config.auth.allowRegistration} anonymousWriteEnabled={config.features.allowAnonymousWrite === true} />
                 <main className="flex-1">{children}</main>
                 <Footer />
                 <CookieConsentBanner />

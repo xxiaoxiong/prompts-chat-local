@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { checkPromptAccess } from "@/lib/prompt-access";
+import { isAnonymousWriteEnabled, requireUserOrAnonymous } from "@/lib/anonymous-write";
 
 const createVersionSchema = z.object({
   content: z.string().min(1, "Content is required"),
@@ -15,12 +16,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "unauthorized", message: "You must be logged in" },
-        { status: 401 }
-      );
+    const { actor, unauthorizedResponse } = await requireUserOrAnonymous();
+    if (!actor) {
+      return unauthorizedResponse;
     }
 
     const { id: promptId } = await params;
@@ -38,7 +36,8 @@ export async function POST(
       );
     }
 
-    if (prompt.authorId !== session.user.id) {
+    const anonymousWriteEnabled = await isAnonymousWriteEnabled();
+    if (!anonymousWriteEnabled && prompt.authorId !== actor.id) {
       return NextResponse.json(
         { error: "forbidden", message: "You can only add versions to your own prompts" },
         { status: 403 }
@@ -82,7 +81,7 @@ export async function POST(
           version: newVersionNumber,
           content,
           changeNote: changeNote || `Version ${newVersionNumber}`,
-          createdBy: session.user.id,
+          createdBy: actor.id,
         },
         include: {
           author: {

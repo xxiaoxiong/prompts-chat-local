@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isAnonymousWriteEnabled, requireUserOrAnonymous } from "@/lib/anonymous-write";
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; versionId: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "unauthorized", message: "You must be logged in" },
-        { status: 401 }
-      );
+    const { actor, unauthorizedResponse } = await requireUserOrAnonymous();
+    if (!actor) {
+      return unauthorizedResponse;
     }
 
     const { id: promptId, versionId } = await params;
@@ -30,7 +28,8 @@ export async function DELETE(
       );
     }
 
-    if (prompt.authorId !== session.user.id) {
+    const anonymousWriteEnabled = await isAnonymousWriteEnabled();
+    if (!anonymousWriteEnabled && prompt.authorId !== actor.id) {
       return NextResponse.json(
         { error: "forbidden", message: "You can only delete versions of your own prompts" },
         { status: 403 }
